@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 from influxdb_client import Point
 from datetime import datetime
 
@@ -28,7 +29,10 @@ async def write_data(
         .time(datetime.utcnow())
     )
     write_api.write(bucket=BUCKET, org=ORG, record=point)
-    return {"message": "Data written successfully"}
+
+    return JSONResponse(
+        content={"message": "Data written successfully."}, status_code=201
+    )
 
 
 @router.get("/query-data/")
@@ -54,7 +58,7 @@ async def query_data(device_id: str):
 
             formatted_results[timestamp][field] = value
 
-    return {"data": formatted_results}
+    return JSONResponse(content=formatted_results, status_code=200)
 
 
 @router.get("/fetch-all")
@@ -90,4 +94,4 @@ async def fetch_all_data():
 
                 datasets[measurement][device_id][timestamp][field] = value
 
-    return {"data": datasets}
+    return JSONResponse(content={"data": datasets}, status_code=200)

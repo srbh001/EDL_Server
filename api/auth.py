@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.security import OAuth2PasswordRequestForm
 from influxdb_client import Point
 from datetime import datetime
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.responses import JSONResponse
 
 from utils.database import write_api, query_api
 from utils.security import create_access_token
@@ -72,7 +72,9 @@ async def login(credentials: HTTPBasicCredentials = Depends(security)):
         device_id=matched_device_id, username=credentials.username
     )
 
-    return {"access_token": access_token, "token_type": "bearer"}
+    return JSONResponse(
+        content={"access_token": access_token, "token_type": "bearer"}, status_code=200
+    )
 
 
 @router.post("/sign-up")
@@ -109,7 +111,6 @@ async def sign_up(username: str, password: str, device_code: str):
 
     hashed_password = password  # FIXME: Replace with actual hashing
 
-    # Create a new user_auth entry
     point = (
         Point("user_auth")
         .tag("device_id", device_id)
@@ -122,4 +123,7 @@ async def sign_up(username: str, password: str, device_code: str):
     # Generate authentication token
     token = create_access_token(device_id=device_id, username=username)
 
-    return {"message": "User created successfully", "token": token}
+    return JSONResponse(
+        content={"message": "User created successfully", "token": token},
+        status_code=201,
+    )
