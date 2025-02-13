@@ -124,6 +124,6 @@ async def sign_up(username: str, password: str, device_code: str):
     token = create_access_token(device_id=device_id, username=username)
 
     return JSONResponse(
-        content={"message": "User created successfully", "token": token},
+        content={"message": "User created successfully", "access_token": token},
         status_code=201,
     )
