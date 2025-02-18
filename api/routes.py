@@ -20,7 +20,6 @@ async def generate_data(num_points: int = Query(100, ge=1, le=1000)):
     """
     Generates `num_points` of random sensor data and writes to InfluxDB.
     """
-    # TODO: Generate data in more useful patterns.
     time_now = datetime.utcnow()
     time_start = time_now - timedelta(hours=24)  # Data spread over the last 24 hours
 
@@ -28,17 +27,33 @@ async def generate_data(num_points: int = Query(100, ge=1, le=1000)):
         timestamp = time_start + timedelta(
             seconds=random.randint(0, 86400)
         )  # Random time
-        I = round(random.uniform(0.1, 10.0), 2)  # Random Current (I)
-        V = round(random.uniform(110.0, 250.0), 2)  # Random Voltage (V)
-        P = round(I * V, 2)  # Power (P = I * V)
+
+        # Generate random power components for three phases
+        P_a_real = round(random.uniform(500, 2000), 2)
+        P_a_imag = round(random.uniform(-500, 500), 2)
+        P_a_mag = round((P_a_real**2 + P_a_imag**2) ** 0.5, 2)
+
+        P_b_real = round(random.uniform(500, 2000), 2)
+        P_b_imag = round(random.uniform(-500, 500), 2)
+        P_b_mag = round((P_b_real**2 + P_b_imag**2) ** 0.5, 2)
+
+        P_c_real = round(random.uniform(500, 2000), 2)
+        P_c_imag = round(random.uniform(-500, 500), 2)
+        P_c_mag = round((P_c_real**2 + P_c_imag**2) ** 0.5, 2)
 
         # Create and write InfluxDB point
         point = (
             Point("sensor_data")
             .tag("device_id", "random12")
-            .field("I", I)
-            .field("V", V)
-            .field("P", P)
+            .field("P_a_real", P_a_real)
+            .field("P_a_imag", P_a_imag)
+            .field("P_a_mag", P_a_mag)
+            .field("P_b_real", P_b_real)
+            .field("P_b_imag", P_b_imag)
+            .field("P_b_mag", P_b_mag)
+            .field("P_c_real", P_c_real)
+            .field("P_c_imag", P_c_imag)
+            .field("P_c_mag", P_c_mag)
             .time(timestamp, WritePrecision.NS)
         )
         write_api.write(bucket=BUCKET, org=ORG, record=point)
@@ -50,27 +65,30 @@ async def generate_data(num_points: int = Query(100, ge=1, le=1000)):
 
 
 @router.post("/write-data/")
-async def write_data(
-    I: float, V: float, P: float, payload: str = Depends(verify_token)
-):
-    """Write sensor data to InfluxDB with device_id as a tag."""
+async def write_data(P: dict, payload: str = Depends(verify_token)):
+    """Write three-phase power data (real, imaginary, magnitude) to InfluxDB."""
     device_id = payload.get("device_id")
     point = (
         Point("sensor_data")
         .tag("device_id", device_id)
-        .field("I", I)
-        .field("V", V)
-        .field("P", P)
+        .field("P_a_real", P["a"]["real"])
+        .field("P_a_imag", P["a"]["imag"])
+        .field("P_a_mag", P["a"]["mag"])
+        .field("P_b_real", P["b"]["real"])
+        .field("P_b_imag", P["b"]["imag"])
+        .field("P_b_mag", P["b"]["mag"])
+        .field("P_c_real", P["c"]["real"])
+        .field("P_c_imag", P["c"]["imag"])
+        .field("P_c_mag", P["c"]["mag"])
         .time(datetime.utcnow())
     )
     write_api.write(bucket=BUCKET, org=ORG, record=point)
 
     return JSONResponse(
         content={"message": "Data written successfully."}, status_code=201
-    )
+    ) @ router.get("/query-data/")
 
 
-@router.get("/query-data/")
 async def query_data(device_id: str):
     """Query sensor data from InfluxDB for a specific device (last 24h)."""
     query = f"""
