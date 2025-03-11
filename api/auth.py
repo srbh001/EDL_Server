@@ -30,7 +30,6 @@ async def login(credentials: HTTPBasicCredentials = Depends(security)):
 
     latest_records = {}  # Store latest uname-password-device_id triplets
 
-    # Iterate over all records to find username and password
     for table in tables:
         for record in table.records:
             device_id = record.values.get("device_id")
@@ -84,7 +83,7 @@ async def sign_up(username: str, password: str, device_code: str):
     - Retrieves all `device_keys` records.
     - Verifies if `device_code` exists in any of the records.
     - Stores `username` and `hashed password` in `user_auth`.
-    - Returns an authentication token.
+    - Ensures only one user per `device_id`.
     """
 
     # Query all device_keys records
@@ -94,8 +93,6 @@ async def sign_up(username: str, password: str, device_code: str):
       |> filter(fn: (r) => r._measurement == "device_keys")
     """
     tables = query_api.query(query, org=ORG)
-
-    print("[INFO]: Retrieved device_keys tables:", tables)
 
     device_id = None
 
@@ -110,6 +107,16 @@ async def sign_up(username: str, password: str, device_code: str):
         raise HTTPException(status_code=400, detail="Invalid device code")
 
     hashed_password = password  # FIXME: Replace with actual hashing
+
+    # Delete existing user authentication data for this device
+    delete_query = f"""
+    from(bucket: "{BUCKET}")
+      |> range(start: -30d)
+      |> filter(fn: (r) => r._measurement == "user_auth")
+      |> filter(fn: (r) => r.device_id == "{device_id}")
+      |> drop(columns: ["_value"])
+    """
+    query_api.query(delete_query, org=ORG)
 
     point = (
         Point("user_auth")

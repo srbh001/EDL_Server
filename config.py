@@ -1,22 +1,16 @@
 from pydantic_settings import BaseSettings
+import os
 from dotenv import load_dotenv
 
-# Load environment variables from a .env file
 load_dotenv()
 
 
 class Settings(BaseSettings):
-    influxdb_url: str
-    influxdb_token: str
-    influxdb_org: str
-    influxdb_bucket: str
-    secret_key: str
-
-    class Config:
-        env_file = ".env"  # Specifies the .env file to load variables from
-        env_file_encoding = "utf-8"
+    influxdb_url: str = os.getenv("INFLUXDB_URL")
+    influxdb_token: str = os.getenv("INFLUXDB_TOKEN")
+    influxdb_org: str = os.getenv("INFLUXDB_ORG")
+    influxdb_bucket: str = os.getenv("INFLUXDB_BUCKET")
+    secret_key: str = os.getenv("SECRET_KEY")
 
 
-# Example usage
 settings = Settings()
-print(settings.influxdb_url)

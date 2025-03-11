@@ -1,130 +1,88 @@
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from influxdb_client import Point, WritePrecision
-from influxdb_client.client.write_api import SYNCHRONOUS
 from datetime import datetime, timedelta
-import random
-
 from utils.database import write_api, query_api
 from utils.security import verify_token
 from config import settings
 
 router = APIRouter()
-
 BUCKET = settings.influxdb_bucket
 ORG = settings.influxdb_org
 
 
-@router.post("/generate-data/")
-async def generate_data(num_points: int = Query(100, ge=1, le=1000)):
-    """
-    Generates `num_points` of random sensor data and writes to InfluxDB.
-    """
-    time_now = datetime.utcnow()
-    time_start = time_now - timedelta(hours=24)  # Data spread over the last 24 hours
-
-    for _ in range(num_points):
-        timestamp = time_start + timedelta(
-            seconds=random.randint(0, 86400)
-        )  # Random time
-
-        # Generate random power components for three phases
-        P_a_real = round(random.uniform(500, 2000), 2)
-        P_a_imag = round(random.uniform(-500, 500), 2)
-        P_a_mag = round((P_a_real**2 + P_a_imag**2) ** 0.5, 2)
-
-        P_b_real = round(random.uniform(500, 2000), 2)
-        P_b_imag = round(random.uniform(-500, 500), 2)
-        P_b_mag = round((P_b_real**2 + P_b_imag**2) ** 0.5, 2)
-
-        P_c_real = round(random.uniform(500, 2000), 2)
-        P_c_imag = round(random.uniform(-500, 500), 2)
-        P_c_mag = round((P_c_real**2 + P_c_imag**2) ** 0.5, 2)
-
-        # Create and write InfluxDB point
-        point = (
-            Point("sensor_data")
-            .tag("device_id", "random12")
-            .field("P_a_real", P_a_real)
-            .field("P_a_imag", P_a_imag)
-            .field("P_a_mag", P_a_mag)
-            .field("P_b_real", P_b_real)
-            .field("P_b_imag", P_b_imag)
-            .field("P_b_mag", P_b_mag)
-            .field("P_c_real", P_c_real)
-            .field("P_c_imag", P_c_imag)
-            .field("P_c_mag", P_c_mag)
-            .time(timestamp, WritePrecision.NS)
-        )
-        write_api.write(bucket=BUCKET, org=ORG, record=point)
-
-    return JSONResponse(
-        content={"message": f"{num_points} data points written successfully."},
-        status_code=201,
-    )
-
-
-@router.post("/write-data/")
-async def write_data(P: dict, payload: str = Depends(verify_token)):
-    """Write three-phase power data (real, imaginary, magnitude) to InfluxDB."""
+@router.post("/write-data")
+async def write_data(
+    power_data: list[dict] = None,
+    energy_data: list[dict] = None,
+    payload: str = Depends(verify_token),
+):
+    """Batch write power and energy data to InfluxDB."""
     device_id = payload.get("device_id")
-    point = (
-        Point("sensor_data")
-        .tag("device_id", device_id)
-        .field("P_a_real", P["a"]["real"])
-        .field("P_a_imag", P["a"]["imag"])
-        .field("P_a_mag", P["a"]["mag"])
-        .field("P_b_real", P["b"]["real"])
-        .field("P_b_imag", P["b"]["imag"])
-        .field("P_b_mag", P["b"]["mag"])
-        .field("P_c_real", P["c"]["real"])
-        .field("P_c_imag", P["c"]["imag"])
-        .field("P_c_mag", P["c"]["mag"])
-        .time(datetime.utcnow())
-    )
-    write_api.write(bucket=BUCKET, org=ORG, record=point)
+    points = []
+    time_now = datetime.utcnow()
+
+    if power_data:
+        for p in power_data:
+            try:
+                timestamp = datetime.strptime(p["time"], "%Y-%m-%dT%H:%M:%S.%fZ")
+            except (KeyError, ValueError, TypeError):
+                timestamp = (
+                    time_now  # Use current time if key is missing or invalid format
+                )
+
+            points.append(
+                Point("power_data")
+                .tag("device_id", device_id)
+                .tag("phase", p["phase"])
+                .field("power_watt", p["power_watt"])
+                .field("power_var", p["power_var"])
+                .field("power_va", p["power_va"])
+                .field("voltage_rms", p["voltage_rms"])
+                .field("current_rms", p["current_rms"])
+                .field("power_factor", p["power_factor"])
+                .field("voltage_thd", p["voltage_thd"])
+                .field("current_thd", p["current_thd"])
+                .time(timestamp, WritePrecision.NS)
+            )
+
+    if energy_data:
+        for e in energy_data:
+            try:
+                timestamp = datetime.strptime(e["time"], "%Y-%m-%dT%H:%M:%S.%fZ")
+            except (KeyError, ValueError, TypeError):
+                timestamp = (
+                    time_now  # Use current time if key is missing or invalid format
+                )
+
+            points.append(
+                Point("energy_data")
+                .tag("device_id", device_id)
+                .tag("phase", e["phase"])
+                .field("energy_kwh", e["energy_kwh"])
+                .time(timestamp, WritePrecision.NS)
+            )
+
+    if not points:
+        raise HTTPException(status_code=400, detail="No valid data to write.")
+
+    write_api.write(bucket=BUCKET, org=ORG, record=points)
 
     return JSONResponse(
         content={"message": "Data written successfully."}, status_code=201
-    ) @ router.get("/query-data/")
+    )
 
 
-async def query_data(device_id: str):
-    """Query sensor data from InfluxDB for a specific device (last 24h)."""
-    query = f"""
-    from(bucket: "{BUCKET}")
-      |> range(start: -24h)
-      |> filter(fn: (r) => r._measurement == "sensor_data")
-      |> filter(fn: (r) => r.device_id == "{device_id}")
-    """
-    tables = query_api.query(query, org=ORG)
-
-    formatted_results = {}
-    for table in tables:
-        for record in table.records:
-            timestamp = record.get_time().isoformat()
-            field = record.get_field()
-            value = record.get_value()
-
-            if timestamp not in formatted_results:
-                formatted_results[timestamp] = {}
-
-            formatted_results[timestamp][field] = value
-
-    return JSONResponse(content=formatted_results, status_code=200)
-
-
-@router.get("/get-data")
-async def get_data(device_id: str, range: int):
-    """Query I, V, P data for a given range of time and device_id."""
-    time_range = f"-{range}h"
+@router.get("/query-data/")
+async def query_data(range_hours: int = 24, payload: str = Depends(verify_token)):
+    """Query power and energy data for a specific device over a given time range."""
+    device_id = payload.get("device_id")
+    time_range = f"-{range_hours}h"
     query = f"""
     from(bucket: "{BUCKET}")
       |> range(start: {time_range})
-      |> filter(fn: (r) => r._measurement == "sensor_data")
       |> filter(fn: (r) => r.device_id == "{device_id}")
     """
-
     tables = query_api.query(query, org=ORG)
     formatted_results = {}
 
@@ -133,46 +91,57 @@ async def get_data(device_id: str, range: int):
             timestamp = record.get_time().isoformat()
             field = record.get_field()
             value = record.get_value()
-
             if timestamp not in formatted_results:
                 formatted_results[timestamp] = {}
-
             formatted_results[timestamp][field] = value
 
     return JSONResponse(content=formatted_results, status_code=200)
+
+
+@router.get("/fetch-analytics/")
+async def fetch_analytics(device_id: str):
+    """Fetch analytics data for a given device."""
+    query = f"""
+    from(bucket: "{BUCKET}")
+      |> range(start: -30d)
+      |> filter(fn: (r) => r._measurement == "analytics_data")
+      |> filter(fn: (r) => r.device_id == "{device_id}")
+    """
+    tables = query_api.query(query, org=ORG)
+    analytics_results = {}
+
+    for table in tables:
+        for record in table.records:
+            field = record.get_field()
+            value = record.get_value()
+            analytics_results[field] = value
+
+    return JSONResponse(content=analytics_results, status_code=200)
 
 
 @router.get("/fetch-all")
 async def fetch_all_data():
-    """Fetch all data from user_auth, device_keys, and sensor_data."""
+    """Fetch all data in the InfluxDB bucket without authentication for testing"""
 
-    datasets = {"user_auth": {}, "device_keys": {}, "sensor_data": {}}
+    query = f"""
+    from(bucket: "{BUCKET}")
+      |> range(start: -30d)  // Fetch last 30 days of data
+    """
 
-    measurements = ["user_auth", "device_keys", "sensor_data"]
+    tables = query_api.query(query, org=ORG)
 
-    for measurement in measurements:
-        query = f"""
-        from(bucket: "{BUCKET}")
-          |> range(start: -30d)  
-          |> filter(fn: (r) => r._measurement == "{measurement}")
-        """
-        tables = query_api.query(query, org=ORG)
+    results = []
 
-        for table in tables:
-            for record in table.records:
-                device_id = record.values.get(
-                    "device_id", "unknown"
-                )  # Extract device_id
-                timestamp = record.get_time().isoformat()
-                field = record.get_field()
-                value = record.get_value()
+    for table in tables:
+        for record in table.records:
+            results.append(
+                {
+                    "measurement": record.get_measurement(),
+                    "device_id": record.values.get("device_id"),
+                    "field": record.values.get("_field"),
+                    "value": record.get_value(),
+                    "time": record.get_time(),
+                }
+            )
 
-                if device_id not in datasets[measurement]:
-                    datasets[measurement][device_id] = {}
-
-                if timestamp not in datasets[measurement][device_id]:
-                    datasets[measurement][device_id][timestamp] = {}
-
-                datasets[measurement][device_id][timestamp][field] = value
-
-    return JSONResponse(content=datasets, status_code=200)
+    return {"data": results}
