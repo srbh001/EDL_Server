@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from influxdb_client import Point, WritePrecision
 from datetime import datetime, timedelta
@@ -43,23 +43,7 @@ async def write_data(
                 .field("power_factor", p["power_factor"])
                 .field("voltage_thd", p["voltage_thd"])
                 .field("current_thd", p["current_thd"])
-                .time(timestamp, WritePrecision.NS)
-            )
-
-    if energy_data:
-        for e in energy_data:
-            try:
-                timestamp = datetime.strptime(e["time"], "%Y-%m-%dT%H:%M:%S.%fZ")
-            except (KeyError, ValueError, TypeError):
-                timestamp = (
-                    time_now  # Use current time if key is missing or invalid format
-                )
-
-            points.append(
-                Point("energy_data")
-                .tag("device_id", device_id)
-                .tag("phase", e["phase"])
-                .field("energy_kwh", e["energy_kwh"])
+                .field("energy_kwh", p["energy_kwh"])
                 .time(timestamp, WritePrecision.NS)
             )
 
