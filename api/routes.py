@@ -58,26 +58,39 @@ async def write_data(
 
 
 @router.get("/query-data/")
-async def query_data(range_hours: int = 24, payload: str = Depends(verify_token)):
-    """Query power and energy data for a specific device over a given time range."""
-    device_id = payload.get("device_id")
+async def query_data(range_hours: int = 240, device_id: str = "random12"):
+    """Query power and energy data for a specific device, grouped by phase."""
     time_range = f"-{range_hours}h"
+
+    # Flux Query
     query = f"""
     from(bucket: "{BUCKET}")
       |> range(start: {time_range})
       |> filter(fn: (r) => r.device_id == "{device_id}")
+      |> group(columns: ["phase"])  // Group by phase
+      |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")  // Pivot for structured output
+      |> keep(columns: ["_time", "phase", "power_watt", "voltage_rms", "current_rms", "energy_kwh"])  // Keep only relevant fields
     """
+
     tables = query_api.query(query, org=ORG)
     formatted_results = {}
 
     for table in tables:
         for record in table.records:
             timestamp = record.get_time().isoformat()
-            field = record.get_field()
-            value = record.get_value()
-            if timestamp not in formatted_results:
-                formatted_results[timestamp] = {}
-            formatted_results[timestamp][field] = value
+            phase = record.values.get("phase", "Unknown")
+            if phase not in formatted_results:
+                formatted_results[phase] = []
+
+            formatted_results[phase].append(
+                {
+                    "timestamp": timestamp,
+                    "power_watt": record.values.get("power_watt", None),
+                    "voltage_rms": record.values.get("voltage_rms", None),
+                    "current_rms": record.values.get("current_rms", None),
+                    "energy_kwh": record.values.get("energy_kwh", None),
+                }
+            )
 
     return JSONResponse(content=formatted_results, status_code=200)
 
