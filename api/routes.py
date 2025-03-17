@@ -129,3 +129,43 @@ async def fetch_all_data():
             )
 
     return {"data": results}
+
+
+@router.get("/latest-values")
+async def get_latest_values(payload: dict = Depends(verify_token)):
+    """Get the latest values of voltage, current, and power for each phase (A, B, C) of the device."""
+    device_id = payload.get("device_id")
+
+    query = f'''
+    from(bucket: "{BUCKET}")
+      |> range(start: -1y)  // Look back 1 year to ensure we get the latest data
+      |> filter(fn: (r) => r._measurement == "power_data")
+      |> filter(fn: (r) => r.device_id == "{device_id}")
+      |> filter(fn: (r) => r._field == "voltage_rms" or r._field == "current_rms" or r._field == "power_watt")
+      |> group(columns: ["phase"])
+      |> last()  // Get the most recent record for each field per phase
+      |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")  // Pivot fields into columns
+    '''
+
+    tables = query_api.query(query, org=ORG)
+    latest_values = {}
+
+    for table in tables:
+        if table.records:
+            record = table.records[0]
+            phase = record.values["phase"]
+            latest_values[phase] = {
+                "timestamp": record[
+                    "_time"
+                ].isoformat(),  # ISO 8601 formatted timestamp
+                "voltage": record.get("voltage_rms"),
+                "current": record.get("current_rms"),
+                "power": record.get("power_watt"),
+            }
+
+    if not latest_values:
+        return JSONResponse(
+            content={"message": "No data found for the device."}, status_code=404
+        )
+
+    return JSONResponse(content=latest_values, status_code=200)
