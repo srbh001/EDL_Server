@@ -132,35 +132,34 @@ async def fetch_all_data():
 
 
 @router.get("/latest-values")
-async def get_latest_values(payload: dict = Depends(verify_token)):
+async def get_latest_values():
     """Get the latest values of voltage, current, and power for each phase (A, B, C) of the device."""
-    device_id = payload.get("device_id")
-
+    device_id = "random12"
     query = f'''
+    
     from(bucket: "{BUCKET}")
-      |> range(start: -1y)  // Look back 1 year to ensure we get the latest data
-      |> filter(fn: (r) => r._measurement == "power_data")
-      |> filter(fn: (r) => r.device_id == "{device_id}")
-      |> filter(fn: (r) => r._field == "voltage_rms" or r._field == "current_rms" or r._field == "power_watt")
-      |> group(columns: ["phase"])
-      |> last()  // Get the most recent record for each field per phase
-      |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")  // Pivot fields into columns
+    |> range(start: -1y)
+    |> filter(fn: (r) => r._measurement == "power_data")
+    |> filter(fn: (r) => r.device_id == "{device_id}")
+    |> filter(fn: (r) => r._field == "voltage_rms" or r._field == "current_rms" or r._field == "power_watt")
+    |> aggregateWindow(every: 1h, fn: mean, createEmpty: false)
+    |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
     '''
 
     tables = query_api.query(query, org=ORG)
     latest_values = {}
 
     for table in tables:
-        if table.records:
-            record = table.records[0]
-            phase = record.values["phase"]
+        for record in table.records:
+            print("[DEBUG] Record: ", record.values)
+            phase = record.values.get("phase")
+            if not phase:
+                continue  # Skip if phase is missing
             latest_values[phase] = {
-                "timestamp": record[
-                    "_time"
-                ].isoformat(),  # ISO 8601 formatted timestamp
-                "voltage": record.get("voltage_rms"),
-                "current": record.get("current_rms"),
-                "power": record.get("power_watt"),
+                "timestamp": record.values.get("_time").isoformat(),
+                "voltage": record.values.get("voltage_rms"),
+                "current": record.values.get("current_rms"),
+                "power": record.values.get("power_watt"),
             }
 
     if not latest_values:
