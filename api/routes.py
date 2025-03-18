@@ -12,44 +12,51 @@ ORG = settings.influxdb_org
 
 
 @router.post("/write-data")
-async def write_data(
-    power_data: list[dict] = None,
-    # payload: str = Depends(verify_token),
-):
+async def write_data(power_data: list[dict] = None):
     """Batch write power and energy data to InfluxDB."""
     device_id = "random12"
     points = []
     time_now = datetime.now(timezone.utc)
 
-    if power_data:
-        for p in power_data:
-            try:
-                timestamp = datetime.strptime(p["time"], "%Y-%m-%dT%H:%M:%S.%fZ")
-            except (KeyError, ValueError, TypeError):
-                timestamp = (
-                    time_now  # Use current time if key is missing or invalid format
-                )
+    if not power_data:
+        raise HTTPException(status_code=400, detail="No data provided.")
 
-            points.append(
+    for p in power_data:
+        try:
+            timestamp = datetime.strptime(p["time"], "%Y-%m-%dT%H:%M:%S.%fZ")
+        except (KeyError, ValueError, TypeError):
+            timestamp = time_now  # Fallback if missing or invalid format
+
+        try:
+            point = (
                 Point("power_data")
                 .tag("device_id", device_id)
                 .tag("phase", p["phase"])
-                .field("power_watt", p["power_watt"])
-                .field("power_var", p["power_var"])
-                .field("power_va", p["power_va"])
-                .field("voltage_rms", p["voltage_rms"])
-                .field("current_rms", p["current_rms"])
-                .field("power_factor", p["power_factor"])
-                .field("voltage_thd", p["voltage_thd"])
-                .field("current_thd", p["current_thd"])
-                .field("energy_kwh", p["energy_kwh"])
+                .field("power_watt", float(p["power_watt"]))
+                .field("power_var", float(p["power_var"]))
+                .field("power_va", float(p["power_va"]))
+                .field("voltage_rms", float(p["voltage_rms"]))
+                .field("current_rms", float(p["current_rms"]))
+                .field("power_factor", float(p["power_factor"]))
+                .field("voltage_thd", float(p["voltage_thd"]))
+                .field("current_thd", float(p["current_thd"]))
+                .field("energy_kwh", float(p["energy_kwh"]))
                 .time(timestamp, WritePrecision.NS)
+            )
+            points.append(point)
+        except KeyError as e:
+            raise HTTPException(
+                status_code=400, detail=f"Missing required field: {str(e)}"
             )
 
     if not points:
         raise HTTPException(status_code=400, detail="No valid data to write.")
 
-    write_api.write(bucket=BUCKET, org=ORG, record=points)
+    try:
+        print("[DEBUG] Writing data to InfluxDB..., points: ", points)
+        write_api.write(bucket=BUCKET, org=ORG, record=points)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to write data: {str(e)}")
 
     return JSONResponse(
         content={"message": "Data written successfully."}, status_code=201
