@@ -181,3 +181,44 @@ async def get_latest_values():
         )
 
     return JSONResponse(content=latest_values, status_code=200)
+
+
+@router.get("/thd-values")
+async def get_thd_data():
+    """Get the thd values of all three phases"""
+
+    device_id = "random12"
+    query = f'''
+
+    from(bucket: "{BUCKET}")
+    |> range(start: -1y)
+    |> filter(fn: (r) => r._measurement == "power_data")
+    |> filter(fn: (r) => r.device_id == "{device_id}")
+    |> filter(fn: (r) => r._field == "current_thd" or r._field == "voltage_thd" or r._field == "power_factor")
+    |> aggregateWindow(every: 1h, fn: mean, createEmpty: false)
+    |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+    '''
+
+    tables = query_api.query(query, org=ORG)
+
+    latest_values = {}
+
+    for table in tables:
+        for record in table.records:
+            print("[DEBUG] Record: ", record.values)
+            phase = record.values.get("phase")
+            if not phase:
+                continue  # Skip if phase is missing
+            latest_values[phase] = {
+                "timestamp": record.values.get("_time").isoformat(),
+                "voltage_thd": record.values.get("voltage_thd"),
+                "current_thd": record.values.get("current_thd"),
+                "power_factor": record.values.get("power_factor"),
+            }
+
+    if not latest_values:
+        return JSONResponse(
+            content={"message": "No data found for the device."}, status_code=404
+        )
+
+    return JSONResponse(content=latest_values, status_code=200)
