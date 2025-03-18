@@ -151,14 +151,14 @@ async def get_latest_values():
     query = f'''
     
     from(bucket: "{BUCKET}")
-    |> range(start: -1y)
+    |> range(start: -1h)  // Consider last 1 hour
     |> filter(fn: (r) => r._measurement == "power_data")
     |> filter(fn: (r) => r.device_id == "{device_id}")
     |> filter(fn: (r) => r._field == "voltage_rms" or r._field == "current_rms" or r._field == "power_watt")
-    |> aggregateWindow(every: 1h, fn: mean, createEmpty: false)
+    |> group(columns: ["_field", "phase"])  // Ensure phase and field are properly grouped
+    |> last()  // Get the latest value per field and phase
     |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
     '''
-
     tables = query_api.query(query, org=ORG)
     latest_values = {}
 
@@ -191,12 +191,12 @@ async def get_thd_data():
     query = f'''
 
     from(bucket: "{BUCKET}")
-    |> range(start: -1y)
-    |> filter(fn: (r) => r._measurement == "power_data")
-    |> filter(fn: (r) => r.device_id == "{device_id}")
-    |> filter(fn: (r) => r._field == "current_thd" or r._field == "voltage_thd" or r._field == "power_factor")
-    |> aggregateWindow(every: 1h, fn: mean, createEmpty: false)
-    |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+      |> range(start: -1y)
+      |> filter(fn: (r) => r.device_id == "{device_id}")
+      |> filter(fn: (r) => r._measurement == "power_data")
+      |> group(columns: ["phase"])  // Group by phase
+      |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")  // Pivot for structured output
+      |> keep(columns: ["_time", "phase", "power_factor", "voltage_thd", "current_thd"])  // Keep only relevant fields
     '''
 
     tables = query_api.query(query, org=ORG)
@@ -209,12 +209,17 @@ async def get_thd_data():
             phase = record.values.get("phase")
             if not phase:
                 continue  # Skip if phase is missing
-            latest_values[phase] = {
+
+            data_point = {
                 "timestamp": record.values.get("_time").isoformat(),
                 "voltage_thd": record.values.get("voltage_thd"),
                 "current_thd": record.values.get("current_thd"),
                 "power_factor": record.values.get("power_factor"),
             }
+            if phase not in latest_values:
+                latest_values[phase] = [data_point]
+            else:
+                latest_values[phase].append(data_point)
 
     if not latest_values:
         return JSONResponse(
