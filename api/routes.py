@@ -14,10 +14,10 @@ ORG = settings.influxdb_org
 @router.post("/write-data")
 async def write_data(
     power_data: list[dict] = None,
-    payload: str = Depends(verify_token),
+    # payload: str = Depends(verify_token),
 ):
     """Batch write power and energy data to InfluxDB."""
-    device_id = payload.get("device_id")
+    device_id = "random12"
     points = []
     time_now = datetime.now(timezone.utc)
 
