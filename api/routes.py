@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from influxdb_client import Point, WritePrecision
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from utils.database import write_api, query_api
 from utils.security import verify_token
 from config import settings
@@ -14,13 +14,12 @@ ORG = settings.influxdb_org
 @router.post("/write-data")
 async def write_data(
     power_data: list[dict] = None,
-    energy_data: list[dict] = None,
     payload: str = Depends(verify_token),
 ):
     """Batch write power and energy data to InfluxDB."""
     device_id = payload.get("device_id")
     points = []
-    time_now = datetime.utcnow()
+    time_now = datetime.now(timezone.utc)
 
     if power_data:
         for p in power_data:
@@ -152,13 +151,15 @@ async def get_latest_values():
     
     from(bucket: "{BUCKET}")
     |> range(start: -1h)  // Consider last 1 hour
-    |> filter(fn: (r) => r._measurement == "power_data")
     |> filter(fn: (r) => r.device_id == "{device_id}")
+    |> filter(fn: (r) => r._measurement == "power_data")
     |> filter(fn: (r) => r._field == "voltage_rms" or r._field == "current_rms" or r._field == "power_watt")
-    |> group(columns: ["_field", "phase"])  // Ensure phase and field are properly grouped
-    |> last()  // Get the latest value per field and phase
-    |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+    |> sort(columns: ["_time"], desc: true)  // Sort by time descending to get the latest values first
+    |> first()  // Take the latest value per field
+    |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")  // Pivot for structured output
+    |> keep(columns: ["_time", "phase", "voltage_rms", "current_rms", "power_watt"])  // Keep only relevant columns
     '''
+
     tables = query_api.query(query, org=ORG)
     latest_values = {}
 
