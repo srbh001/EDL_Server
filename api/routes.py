@@ -5,7 +5,10 @@ from datetime import datetime, timedelta, timezone
 from utils.database import write_api, query_api
 from utils.security import verify_token
 from config import settings
+from utils.sprint import Logger
 
+
+l = Logger.get_instance(True)
 router = APIRouter()
 BUCKET = settings.influxdb_bucket
 ORG = settings.influxdb_org
@@ -53,7 +56,7 @@ async def write_data(power_data: list[dict] = None):
         raise HTTPException(status_code=400, detail="No valid data to write.")
 
     try:
-        print("[DEBUG] Writing data to InfluxDB..., points: ", points)
+        l.dprint("Writing data to InfluxDB..., points: ", points)
         write_api.write(bucket=BUCKET, org=ORG, record=points)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to write data: {str(e)}")
@@ -157,7 +160,7 @@ async def get_latest_values():
     query = f'''
     
     from(bucket: "{BUCKET}")
-    |> range(start: -1h)  // Consider last 1 hour
+    |> range(start: -1y)  // Consider last 1 hour
     |> filter(fn: (r) => r.device_id == "{device_id}")
     |> filter(fn: (r) => r._measurement == "power_data")
     |> filter(fn: (r) => r._field == "voltage_rms" or r._field == "current_rms" or r._field == "power_watt")
@@ -172,7 +175,7 @@ async def get_latest_values():
 
     for table in tables:
         for record in table.records:
-            print("[DEBUG] Record: ", record.values)
+            l.dprint("Record: ", record.values)
             phase = record.values.get("phase")
             if not phase:
                 continue  # Skip if phase is missing
@@ -213,7 +216,7 @@ async def get_thd_data():
 
     for table in tables:
         for record in table.records:
-            print("[DEBUG] Record: ", record.values)
+            l.dprint("Record: ", record.values)
             phase = record.values.get("phase")
             if not phase:
                 continue  # Skip if phase is missing
