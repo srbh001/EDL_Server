@@ -4,7 +4,7 @@ import json
 
 
 async def websocket_client():
-    uri = "ws://localhost:8000/ws"  # Change this if your server runs elsewhere
+    uri = "wss://edlserver-production.up.railway.app/ws"  # Change this if your server runs elsewhere
     async with websockets.connect(uri) as websocket:
         # Send initial connection message
         connect_msg = json.dumps({"type": "connect", "device_id": "random12"})
