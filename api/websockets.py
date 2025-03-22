@@ -16,11 +16,6 @@ class Command(BaseModel):
     command: str
 
 
-class Request(BaseModel):
-    device_id: str
-    command: str
-
-
 @ws_router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     # TODO: Add some checks before connection
@@ -60,9 +55,9 @@ async def send_command(cmd: Command):
 
 
 @ws_router.post("/remote-control/status")
-async def get_status(cmd: Request):
-    if cmd.device_id in connections:
-        websocket = connections[cmd.device_id]
+async def get_status(device_id: str):
+    if device_id in connections:
+        websocket = connections[device_id]
         # Send command as JSON
         message = {"type": "command", "command": "status"}
         await websocket.send_text(json.dumps(message))
