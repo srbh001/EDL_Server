@@ -1,4 +1,4 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from pydantic import BaseModel
 import json
 from utils.sprint import Logger
@@ -55,20 +55,32 @@ async def send_command(cmd: Command):
 
 
 @ws_router.get("/remote-control/status")
-async def get_status(device_id: str):
-    l.iprint("device_id: ", device_id)
+async def get_status(device_id: str = Query(..., description="Device ID of the RPi")):
+    l.iprint(f"device_id: {device_id}")
+
     if device_id in connections:
         websocket = connections[device_id]
+
         # Send command as JSON
         message = {"type": "command", "command": "status"}
         await websocket.send_text(json.dumps(message))
 
-        response = await websocket.receive_text()
-        l.iprint("response", response)
-        response = json.loads(response)
-        data = {"A": response["A"], "B": response["B"], "C": response["C"]}
+        try:
+            response_text = await websocket.receive_text()
+            l.iprint(f"response: {response_text}")
+            response = json.loads(response_text)
 
-        return data
+            # Extracting values safely
+            data = {
+                "A": response.get("A"),
+                "B": response.get("B"),
+                "C": response.get("C"),
+            }
 
-    else:
-        return {"status": "RPi not connected"}
+            return data
+
+        except Exception as e:
+            l.eprint(f"Error receiving response: {str(e)}")
+            return {"status": "Error processing response"}
+
+    return {"status": "RPi not connected"}
