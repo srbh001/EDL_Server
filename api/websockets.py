@@ -54,8 +54,9 @@ async def send_command(cmd: Command):
         return {"status": "RPi not connected"}
 
 
-@ws_router.post("/remote-control/status")
+@ws_router.get("/remote-control/status")
 async def get_status(device_id: str):
+    l.iprint("device_id: ", device_id)
     if device_id in connections:
         websocket = connections[device_id]
         # Send command as JSON
@@ -63,6 +64,7 @@ async def get_status(device_id: str):
         await websocket.send_text(json.dumps(message))
 
         response = await websocket.receive_text()
+        l.iprint("response", response)
         response = json.loads(response)
         data = {"A": response["A"], "B": response["B"], "C": response["C"]}
 
