@@ -13,6 +13,12 @@ connections = {}
 class Command(BaseModel):
     device_id: str
     phase: str
+    command: str
+
+
+class Request(BaseModel):
+    device_id: str
+    command: str
 
 
 @ws_router.websocket("/ws")
@@ -46,8 +52,26 @@ async def send_command(cmd: Command):
     if cmd.device_id in connections:
         websocket = connections[cmd.device_id]
         # Send command as JSON
-        message = {"type": "command", "phase": cmd.phase}
+        message = {"type": "command", "phase": cmd.phase, "command": cmd.command}
         await websocket.send_text(json.dumps(message))
         return {"status": "command sent"}
+    else:
+        return {"status": "RPi not connected"}
+
+
+@ws_router.post("/remote-control/status")
+async def get_status(cmd: Request):
+    if cmd.device_id in connections:
+        websocket = connections[cmd.device_id]
+        # Send command as JSON
+        message = {"type": "command", "command": "status"}
+        await websocket.send_text(json.dumps(message))
+
+        response = await websocket.receive_text()
+        response = json.loads(response)
+        data = {"A": response["A"], "B": response["B"], "C": response["C"]}
+
+        return data
+
     else:
         return {"status": "RPi not connected"}
