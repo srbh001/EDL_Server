@@ -44,6 +44,7 @@ async def websocket_endpoint(websocket: WebSocket):
 # HTTP endpoint to receive commands from the phone
 @ws_router.post("/remote-control")
 async def send_command(cmd: dict):
+    l.iprint("COMMAND: ", cmd)
     if cmd["device_id"] in connections:
         websocket = connections[cmd["device_id"]]
         # Send command as JSON
