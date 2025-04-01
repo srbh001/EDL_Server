@@ -238,3 +238,61 @@ async def get_thd_data():
         )
 
     return JSONResponse(content=latest_values, status_code=200)
+
+
+@router.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    # check the influxdb_client connection
+    test_query = f"""
+    from(bucket: "{BUCKET}")
+      |> range(start: -1m)
+    """
+    try:
+        tables = query_api.query(query=test_query, org=ORG)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to connect to InfluxDB: {str(e)}"
+        )
+
+    return JSONResponse(content={"message": "connection OK."}, status_code=200)
+
+
+@router.get("/last-energy-data")
+async def get_last_energy_val():
+    """Fetches and sends last `energy_kwh` value"""
+
+    device_id = "random12"  # FIXME: Change all of this later.
+    query = f'''
+        from(bucket: "{BUCKET}")
+        |> range(start: -1y)  // Consider last 1 hour
+        |> filter(fn: (r) => r.device_id == "{device_id}")
+        |> filter(fn: (r) => r._measurement == "power_data")
+        |> filter(fn: (r) => r._field == "energy_kwh")
+        |> sort(columns: ["_time"], desc: true)  // Sort by time descending to get the latest values first
+        |> first()  // Take the latest value per field
+        |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")  // Pivot for structured output
+        |> keep(columns: ["_time", "phase", "energy_kwh"])  // Keep only relevant columns
+        '''
+
+    tables = query_api.query(query, org=ORG)
+
+    energy_values = {}
+
+    for table in tables:
+        for record in table.records:
+            l.dprint("Record: ", record.values)
+            phase = record.values.get("phase")
+            if not phase:
+                continue  # Skip if phase is missing
+            energy_values[phase] = {
+                "timestamp": record.values.get("_time").isoformat(),
+                "energy_kwh": record.values.get("energy_kwh"),
+            }
+
+    if not energy_values:
+        return JSONResponse(
+            content={"message": "No data found for the device."}, status_code=404
+        )
+
+    return JSONResponse(content=energy_values, status_code=200)

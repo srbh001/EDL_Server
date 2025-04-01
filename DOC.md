@@ -91,8 +91,8 @@ This document describes the overall architecture of our server application, the 
 
 1. **Bluetooth Integration**
 
-   - Implement the actual Bluetooth handshake on the RPi side to securely transfer the `device_code` to the mobile app.
-   - Ensure that once the user receives the `device_code` over Bluetooth, they can pass it to the server’s `/sign-up` endpoint.
+   - [ ] Implement the actual Bluetooth handshake on the RPi side to securely transfer the `device_code` to the mobile app.
+   - [ ] Ensure that once the user receives the `device_code` over Bluetooth, they can pass it to the server’s `/sign-up` endpoint.
 
 2. **User & Device Linking**
    - Confirm that each `device_id` can only be linked to one user (or decide if multiple users per device is allowed).
