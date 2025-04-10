@@ -9,6 +9,9 @@ from analytics.helpers import (
     fetch_energy_data,
     fetch_power_data,
 )
+from utils.sprint import Logger
+
+l = Logger.get_logger(debug=True)
 
 analysis_router = APIRouter()
 
@@ -36,7 +39,10 @@ async def get_power_analytics(
     # Get the current date in Asia/Kolkata timezone
     current_date = datetime.now(INDIA_TZ).date()
 
+    l.dprint(f"Current date: {current_date}, target date: {target_date}")
+
     if target_date == current_date:
+        l.dprint("Analytics data accessed for today")
         analytics_data = generate_power_analytics(target_date, phase, device_id)
     else:
         analytics_data = fetch_stored_power_analytics(target_date, phase, device_id)
