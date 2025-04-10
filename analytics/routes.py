@@ -11,7 +11,7 @@ from analytics.helpers import (
 )
 from utils.sprint import Logger
 
-l = Logger.get_logger(debug=True)
+l = Logger.get_instance(True)
 
 analysis_router = APIRouter()
 
