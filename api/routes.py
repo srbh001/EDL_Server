@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from influxdb_client import Point, WritePrecision
 from datetime import datetime, timedelta, timezone
@@ -67,14 +67,36 @@ async def write_data(power_data: list[dict] = None):
 
 
 @router.get("/query-data/")
-async def query_data(range_hours: int = 240, device_id: str = "random12"):
+async def query_data(
+    range_hours: int = 240,
+    device_id: str = "random12",
+    date_str: str = Query(description="Date in YYYY-MM-DD format"),
+):
     """Query power and energy data for a specific device, grouped by phase."""
-    time_range = f"-{range_hours}h"
+
+    if date_str:
+        try:
+            dt = datetime.fromisoformat(date_str)
+        except Exception as e:
+            return JSONResponse(
+                content={"message": f"Invalid date format: {e}"}, status_code=400
+            )
+        start_iso = (
+            dt.replace(hour=0, minute=0, second=0, microsecond=0).isoformat() + "Z"
+        )
+        end_iso = (dt + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ).isoformat() + "Z"
+        range_clause = f"range(start: {start_iso}, stop: {end_iso})"
+    elif range_hours is not None:
+        range_clause = f"range(start: -{range_hours}h)"
+    else:
+        range_clause = "range(start: -24h)"
 
     # Flux Query
     query = f"""
     from(bucket: "{BUCKET}")
-      |> range(start: {time_range})
+      |> {range_clause}
       |> filter(fn: (r) => r.device_id == "{device_id}")
       |> group(columns: ["phase"])  // Group by phase
       |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")  // Pivot for structured output
