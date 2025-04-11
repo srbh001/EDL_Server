@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     influxdb_org: str = os.getenv("INFLUXDB_ORG")
     influxdb_bucket: str = os.getenv("INFLUXDB_BUCKET")
     secret_key: str = os.getenv("SECRET_KEY")
+    signup_sec_key: str = os.getenv("SIGNUP_SEC_KEY")
 
 
 settings = Settings()

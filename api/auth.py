@@ -3,6 +3,7 @@ from influxdb_client import Point
 from datetime import datetime
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.responses import JSONResponse
+from cryptography.fernet import Fernet
 
 from utils.database import write_api, query_api
 from utils.security import create_access_token
@@ -87,6 +88,10 @@ async def sign_up(username: str, password: str, device_code: str):
     """
 
     # Query all device_keys records
+    #
+    device_code = decrypt_device_time(
+        secret_key=settings.signup_sec_key, token=device_code.encode()
+    )
     query = f"""
     from(bucket: "{BUCKET}")
       |> range(start: -30d)
@@ -134,3 +139,14 @@ async def sign_up(username: str, password: str, device_code: str):
         content={"message": "User created successfully", "access_token": token},
         status_code=201,
     )
+
+
+def decrypt_device_time(secret_key: bytes, token: bytes) -> str:
+    """
+    Decrypts the token using the secret_key to retrieve the original device_id and timestamp.
+
+    """
+    cipher = Fernet(secret_key)
+    msg = cipher.decrypt(token).decode()
+    device_id, _ = msg.split(":")
+    return device_id
