@@ -195,14 +195,32 @@ async def get_latest_values():
 
 
 @router.get("/thd-values")
-async def get_thd_data():
-    """Get the thd values of all three phases"""
-
+async def get_thd_data(range_hours: int = None, date_str: str = None):
+    """Get the THD values of all three phases."""
     device_id = "random12"
-    query = f'''
 
+    if date_str:
+        try:
+            dt = datetime.fromisoformat(date_str)
+        except Exception as e:
+            return JSONResponse(
+                content={"message": f"Invalid date format: {e}"}, status_code=400
+            )
+        start_iso = (
+            dt.replace(hour=0, minute=0, second=0, microsecond=0).isoformat() + "Z"
+        )
+        end_iso = (dt + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ).isoformat() + "Z"
+        range_clause = f"range(start: {start_iso}, stop: {end_iso})"
+    elif range_hours is not None:
+        range_clause = f"range(start: -{range_hours}h)"
+    else:
+        range_clause = "range(start: -24h)"
+
+    query = f'''
     from(bucket: "{BUCKET}")
-      |> range(start: -1y)
+      |> {range_clause}
       |> filter(fn: (r) => r.device_id == "{device_id}")
       |> filter(fn: (r) => r._measurement == "power_data")
       |> group(columns: ["phase"])  // Group by phase
@@ -211,7 +229,6 @@ async def get_thd_data():
     '''
 
     tables = query_api.query(query, org=ORG)
-
     latest_values = {}
 
     for table in tables:
