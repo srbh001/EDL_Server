@@ -147,5 +147,5 @@ def decrypt_device_time(secret_key: bytes, token: bytes) -> str:
     """
     cipher = Fernet(secret_key)
     msg = cipher.decrypt(token).decode()
-    device_id, _ = msg.split(":")
+    device_id, _ = msg.split("::")
     return device_id
