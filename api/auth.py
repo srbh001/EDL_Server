@@ -89,9 +89,8 @@ async def sign_up(username: str, password: str, device_code: str):
 
     # Query all device_keys records
     #
-    device_code = decrypt_device_time(
-        secret_key=settings.signup_sec_key, token=device_code.encode()
-    )
+    secret_key = settings.signup_sec_key.encode()
+    device_code = decrypt_device_time(secret_key=secret_key, token=device_code.encode())
     query = f"""
     from(bucket: "{BUCKET}")
       |> range(start: -30d)
