@@ -31,9 +31,9 @@ async def websocket_endpoint(websocket: WebSocket):
 
             if device_id not in device_statuses:
                 device_statuses[device_id] = {
-                    "A": None,
+                    "R": None,
+                    "Y": None,
                     "B": None,
-                    "C": None,
                 }
             l.iprint(f"RPi {device_id} connected")
         else:
@@ -46,9 +46,9 @@ async def websocket_endpoint(websocket: WebSocket):
 
             if "status" in message:
                 device_statuses[device_id] = {
-                    "A": message["status"].get("A"),
+                    "R": message["status"].get("R"),
+                    "Y": message["status"].get("Y"),
                     "B": message["status"].get("B"),
-                    "C": message["status"].get("C"),
                 }
                 l.iprint(
                     f"Updated status for {device_id}: {device_statuses[device_id]}"
@@ -94,16 +94,16 @@ async def get_status(device_id: str = Query(..., description="Device ID of the R
         status = device_statuses[device_id]
 
         data = {
-            "A": None,
+            "R": None,
+            "Y": None,
             "B": None,
-            "C": None,
         }
 
         if status:
             data = {
-                "A": status.get("A"),
+                "R": status.get("R"),
+                "Y": status.get("Y"),
                 "B": status.get("B"),
-                "C": status.get("C"),
             }
 
         # Send command as JSON
