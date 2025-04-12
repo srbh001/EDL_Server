@@ -44,6 +44,7 @@ async def write_data(power_data: list[dict] = None):
                 .field("voltage_thd", float(p["voltage_thd"]))
                 .field("current_thd", float(p["current_thd"]))
                 .field("energy_kwh", float(p["energy_kwh"]))
+                .field("voltage_freq", float(p["voltage_freq"]))
                 .time(timestamp, WritePrecision.NS)
             )
             points.append(point)
@@ -189,7 +190,7 @@ async def get_latest_values():
     |> sort(columns: ["_time"], desc: true)  // Sort by time descending to get the latest values first
     |> first()  // Take the latest value per field
     |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")  // Pivot for structured output
-    |> keep(columns: ["_time", "phase", "voltage_rms", "current_rms", "power_watt"])  // Keep only relevant columns
+    |> keep(columns: ["_time", "phase", "voltage_rms", "current_rms", "power_watt", "voltage_freq"])  // Keep only relevant columns
     '''
 
     tables = query_api.query(query, org=ORG)
@@ -206,6 +207,7 @@ async def get_latest_values():
                 "voltage": record.values.get("voltage_rms"),
                 "current": record.values.get("current_rms"),
                 "power": record.values.get("power_watt"),
+                "viltage_freq": record.values.get("voltage_freq"),
             }
 
     if not latest_values:
@@ -247,7 +249,7 @@ async def get_thd_data(range_hours: int = None, date_str: str = None):
       |> filter(fn: (r) => r._measurement == "power_data")
       |> group(columns: ["phase"])  // Group by phase
       |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")  // Pivot for structured output
-      |> keep(columns: ["_time", "phase", "power_factor", "voltage_thd", "current_thd"])  // Keep only relevant fields
+      |> keep(columns: ["_time", "phase", "power_factor", "voltage_thd", "current_thd", "voltage_freq"])  // Keep only relevant fields
     '''
 
     tables = query_api.query(query, org=ORG)
@@ -265,6 +267,7 @@ async def get_thd_data(range_hours: int = None, date_str: str = None):
                 "voltage_thd": record.values.get("voltage_thd"),
                 "current_thd": record.values.get("current_thd"),
                 "power_factor": record.values.get("power_factor"),
+                "voltage_freq": record.values.get("voltage_freq"),
             }
             if phase not in latest_values:
                 latest_values[phase] = [data_point]

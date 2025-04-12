@@ -17,7 +17,7 @@ analysis_router = APIRouter()
 
 # Default device and phase values
 DEFAULT_DEVICE_ID = "random12"
-DEFAULT_PHASE = "A"
+DEFAULT_PHASE = "R"
 
 # Define the target timezone
 INDIA_TZ = ZoneInfo("Asia/Kolkata")
