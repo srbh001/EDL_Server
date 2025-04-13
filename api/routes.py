@@ -102,7 +102,6 @@ async def query_data(
       |> group(columns: ["phase"])  // Group by phase
       |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")  // Pivot for structured output
       |> keep(columns: ["_time", "phase", "power_watt", "voltage_rms", "current_rms", "energy_kwh"])  // Keep only relevant fields
-      |> timeShift(duration: 5h30m)
     """
 
     tables = query_api.query(query, org=ORG)
