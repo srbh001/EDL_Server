@@ -109,14 +109,13 @@ async def query_data(
 
     for table in tables:
         for record in table.records:
-            timestamp = record.get_time().isoformat()
             phase = record.values.get("phase", "Unknown")
             if phase not in formatted_results:
                 formatted_results[phase] = []
 
             formatted_results[phase].append(
                 {
-                    "timestamp": timestamp,
+                    "timestamp": record.values.get("_time").isoformat(),
                     "power_watt": record.values.get("power_watt", None),
                     "voltage_rms": record.values.get("voltage_rms", None),
                     "current_rms": record.values.get("current_rms", None),
