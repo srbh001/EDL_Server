@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from influxdb_client import Point, WritePrecision
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from utils.database import write_api, query_api
 from utils.security import verify_token
 from config import settings
@@ -12,6 +13,8 @@ l = Logger.get_instance(True)
 router = APIRouter()
 BUCKET = settings.influxdb_bucket
 ORG = settings.influxdb_org
+
+INDIA_TZ = ZoneInfo("Asia/Kolkata")
 
 
 @router.post("/write-data")
@@ -77,17 +80,21 @@ async def query_data(
 
     if date_str:
         try:
-            dt = datetime.fromisoformat(date_str)
+            target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
         except Exception as e:
             return JSONResponse(
                 content={"message": f"Invalid date format: {e}"}, status_code=400
             )
-        start_iso = (
-            dt.replace(hour=0, minute=0, second=0, microsecond=0).isoformat() + "Z"
+
+        # Use consistent timezone conversion
+        start_dt = datetime.combine(target_date, datetime.min.time()).replace(
+            tzinfo=INDIA_TZ
         )
-        end_iso = (dt + timedelta(days=1)).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        ).isoformat() + "Z"
+        end_dt = start_dt + timedelta(days=1)
+
+        start_iso = start_dt.astimezone(ZoneInfo("UTC")).isoformat()
+        end_iso = end_dt.astimezone(ZoneInfo("UTC")).isoformat()
+
         range_clause = f"range(start: {start_iso}, stop: {end_iso})"
     elif range_hours is not None:
         range_clause = f"range(start: -{range_hours}h)"
@@ -224,17 +231,21 @@ async def get_thd_data(range_hours: int = None, date_str: str = None):
 
     if date_str:
         try:
-            dt = datetime.fromisoformat(date_str)
+            target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
         except Exception as e:
             return JSONResponse(
                 content={"message": f"Invalid date format: {e}"}, status_code=400
             )
-        start_iso = (
-            dt.replace(hour=0, minute=0, second=0, microsecond=0).isoformat() + "Z"
+
+        # Use consistent timezone conversion
+        start_dt = datetime.combine(target_date, datetime.min.time()).replace(
+            tzinfo=INDIA_TZ
         )
-        end_iso = (dt + timedelta(days=1)).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        ).isoformat() + "Z"
+        end_dt = start_dt + timedelta(days=1)
+
+        start_iso = start_dt.astimezone(ZoneInfo("UTC")).isoformat()
+        end_iso = end_dt.astimezone(ZoneInfo("UTC")).isoformat()
+
         range_clause = f"range(start: {start_iso}, stop: {end_iso})"
     elif range_hours is not None:
         range_clause = f"range(start: -{range_hours}h)"
